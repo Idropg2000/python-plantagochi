@@ -11,6 +11,7 @@ No almacenes la API key en el ESP; despliega este servicio en un host seguro
 """
 
 from flask import Flask, request, jsonify
+import json
 import os
 import openai
 
@@ -97,10 +98,24 @@ def especie():
     except Exception as e:
         return jsonify({"error": "openai request failed", "detail": str(e)}), 502
 
-@app.route('/esplanta', methods=['POST'])
+@app.route('/esplanta', methods=['POST','GET'])
 def esplanta():
-    data = request.get_json(force=True)
-    pregunta = (data.get('pregunta') or '').strip()
+    # Parseo robusto del cuerpo: intenta JSON silencioso, luego crudo, luego form
+    data = request.get_json(silent=True)
+    if data is None:
+        raw = request.data or b''
+        try:
+            data = json.loads(raw.decode('utf-8') or '{}') if raw else {}
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    pregunta = (
+        (data.get('pregunta') if isinstance(data, dict) else None)
+        or request.form.get('pregunta')
+        or request.args.get('pregunta')
+        or ''
+    ).strip()
     if not pregunta:
         return jsonify({"error": "missing 'pregunta' in JSON body"}), 400
 
