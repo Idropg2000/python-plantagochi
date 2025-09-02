@@ -12,6 +12,7 @@ No almacenes la API key en el ESP; despliega este servicio en un host seguro
 
 from flask import Flask, request, jsonify
 import json
+from urllib.parse import parse_qs
 import os
 import openai
 
@@ -100,14 +101,14 @@ def especie():
 
 @app.route('/esplanta', methods=['POST','GET'])
 def esplanta():
-    # Parseo robusto del cuerpo: intenta JSON silencioso, luego crudo, luego form
+    # Parseo robusto del cuerpo: JSON, urlencoded, o texto plano
+    raw_text = request.get_data(cache=True, as_text=True) or ''
     data = request.get_json(silent=True)
-    if data is None:
-        raw = request.data or b''
+    if data is None and raw_text:
         try:
-            data = json.loads(raw.decode('utf-8') or '{}') if raw else {}
+            data = json.loads(raw_text)
         except Exception:
-            data = {}
+            data = None
     if not isinstance(data, dict):
         data = {}
     pregunta = (
@@ -116,6 +117,20 @@ def esplanta():
         or request.args.get('pregunta')
         or ''
     ).strip()
+    # Intento urlencoded manual y texto puro
+    if not pregunta and raw_text:
+        try:
+            form = parse_qs(raw_text)
+            v = form.get('pregunta', [None])[0]
+            if v:
+                pregunta = v
+        except Exception:
+            pass
+    if not pregunta and raw_text:
+        # Si recibimos texto plano (no JSON), úsalo como pregunta
+        t = raw_text.strip().strip('"')
+        if t:
+            pregunta = t
     if not pregunta:
         return jsonify({"error": "missing 'pregunta' in JSON body"}), 400
 
